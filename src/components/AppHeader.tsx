@@ -2,7 +2,7 @@ import { Link, useRouterState, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { Logo } from "./Logo";
-import { Button } from "@/components/ui/button";
+
 import { useAuth, signOut } from "@/lib/use-auth";
 import { getMe } from "@/lib/auth.functions";
 import {
