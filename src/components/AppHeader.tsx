@@ -40,23 +40,18 @@ export function AppHeader() {
   const label = meData?.displayName ?? user?.email ?? "you";
 
   return (
-    <header className="sticky top-0 z-30 border-b border-border bg-background/85 backdrop-blur">
+    <header className="sticky top-0 z-30 border-b border-border bg-background/90 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between px-6">
         <div className="flex items-center gap-8">
           <Logo to="/projects" />
           <nav className="hidden items-center gap-6 md:flex">
             {link("/projects", "Projects", path.startsWith("/projects"))}
             {link("/docs", "Docs", path.startsWith("/docs"))}
-            {meData?.isAdmin && link("/admin/users", "Пользователи", path.startsWith("/admin"))}
+            {meData?.isAdmin && link("/admin/users", "Users", path.startsWith("/admin"))}
           </nav>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" asChild>
-            <a href="https://apidog.com" target="_blank" rel="noreferrer">
-              <BookOpen className="mr-1.5 h-4 w-4" />
-              Apidog
-            </a>
-          </Button>
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button className="flex items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1.5 text-sm hover:bg-secondary">
