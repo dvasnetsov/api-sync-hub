@@ -9,38 +9,192 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as RegisterRouteImport } from './routes/register'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as DocsRouteImport } from './routes/docs'
+import { Route as AppRouteImport } from './routes/_app'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppProjectsIndexRouteImport } from './routes/_app.projects.index'
+import { Route as AppAdminUsersRouteImport } from './routes/_app.admin.users'
+import { Route as AppProjectsSlugIndexRouteImport } from './routes/_app.projects.$slug.index'
+import { Route as AppProjectsSlugMembersRouteImport } from './routes/_app.projects.$slug.members'
+import { Route as AppProjectsSlugCollectionRouteImport } from './routes/_app.projects.$slug.$collection'
+import { Route as ApiPublicSpecsProjectCollectionSplatRouteImport } from './routes/api/public/specs.$project.$collection.$'
 
+const RegisterRoute = RegisterRouteImport.update({
+  id: '/register',
+  path: '/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DocsRoute = DocsRouteImport.update({
+  id: '/docs',
+  path: '/docs',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppRoute = AppRouteImport.update({
+  id: '/_app',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppProjectsIndexRoute = AppProjectsIndexRouteImport.update({
+  id: '/projects/',
+  path: '/projects/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAdminUsersRoute = AppAdminUsersRouteImport.update({
+  id: '/admin/users',
+  path: '/admin/users',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppProjectsSlugIndexRoute = AppProjectsSlugIndexRouteImport.update({
+  id: '/projects/$slug/',
+  path: '/projects/$slug/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppProjectsSlugMembersRoute = AppProjectsSlugMembersRouteImport.update({
+  id: '/projects/$slug/members',
+  path: '/projects/$slug/members',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppProjectsSlugCollectionRoute =
+  AppProjectsSlugCollectionRouteImport.update({
+    id: '/projects/$slug/$collection',
+    path: '/projects/$slug/$collection',
+    getParentRoute: () => AppRoute,
+  } as any)
+const ApiPublicSpecsProjectCollectionSplatRoute =
+  ApiPublicSpecsProjectCollectionSplatRouteImport.update({
+    id: '/api/public/specs/$project/$collection/$',
+    path: '/api/public/specs/$project/$collection/$',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/docs': typeof DocsRoute
+  '/login': typeof LoginRoute
+  '/register': typeof RegisterRoute
+  '/admin/users': typeof AppAdminUsersRoute
+  '/projects/': typeof AppProjectsIndexRoute
+  '/projects/$slug/$collection': typeof AppProjectsSlugCollectionRoute
+  '/projects/$slug/members': typeof AppProjectsSlugMembersRoute
+  '/projects/$slug/': typeof AppProjectsSlugIndexRoute
+  '/api/public/specs/$project/$collection/$': typeof ApiPublicSpecsProjectCollectionSplatRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/docs': typeof DocsRoute
+  '/login': typeof LoginRoute
+  '/register': typeof RegisterRoute
+  '/admin/users': typeof AppAdminUsersRoute
+  '/projects': typeof AppProjectsIndexRoute
+  '/projects/$slug/$collection': typeof AppProjectsSlugCollectionRoute
+  '/projects/$slug/members': typeof AppProjectsSlugMembersRoute
+  '/projects/$slug': typeof AppProjectsSlugIndexRoute
+  '/api/public/specs/$project/$collection/$': typeof ApiPublicSpecsProjectCollectionSplatRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_app': typeof AppRouteWithChildren
+  '/docs': typeof DocsRoute
+  '/login': typeof LoginRoute
+  '/register': typeof RegisterRoute
+  '/_app/admin/users': typeof AppAdminUsersRoute
+  '/_app/projects/': typeof AppProjectsIndexRoute
+  '/_app/projects/$slug/$collection': typeof AppProjectsSlugCollectionRoute
+  '/_app/projects/$slug/members': typeof AppProjectsSlugMembersRoute
+  '/_app/projects/$slug/': typeof AppProjectsSlugIndexRoute
+  '/api/public/specs/$project/$collection/$': typeof ApiPublicSpecsProjectCollectionSplatRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths:
+    | '/'
+    | '/docs'
+    | '/login'
+    | '/register'
+    | '/admin/users'
+    | '/projects/'
+    | '/projects/$slug/$collection'
+    | '/projects/$slug/members'
+    | '/projects/$slug/'
+    | '/api/public/specs/$project/$collection/$'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to:
+    | '/'
+    | '/docs'
+    | '/login'
+    | '/register'
+    | '/admin/users'
+    | '/projects'
+    | '/projects/$slug/$collection'
+    | '/projects/$slug/members'
+    | '/projects/$slug'
+    | '/api/public/specs/$project/$collection/$'
+  id:
+    | '__root__'
+    | '/'
+    | '/_app'
+    | '/docs'
+    | '/login'
+    | '/register'
+    | '/_app/admin/users'
+    | '/_app/projects/'
+    | '/_app/projects/$slug/$collection'
+    | '/_app/projects/$slug/members'
+    | '/_app/projects/$slug/'
+    | '/api/public/specs/$project/$collection/$'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AppRoute: typeof AppRouteWithChildren
+  DocsRoute: typeof DocsRoute
+  LoginRoute: typeof LoginRoute
+  RegisterRoute: typeof RegisterRoute
+  ApiPublicSpecsProjectCollectionSplatRoute: typeof ApiPublicSpecsProjectCollectionSplatRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/register': {
+      id: '/register'
+      path: '/register'
+      fullPath: '/register'
+      preLoaderRoute: typeof RegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/docs': {
+      id: '/docs'
+      path: '/docs'
+      fullPath: '/docs'
+      preLoaderRoute: typeof DocsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_app': {
+      id: '/_app'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -48,11 +202,77 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_app/projects/': {
+      id: '/_app/projects/'
+      path: '/projects'
+      fullPath: '/projects/'
+      preLoaderRoute: typeof AppProjectsIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/admin/users': {
+      id: '/_app/admin/users'
+      path: '/admin/users'
+      fullPath: '/admin/users'
+      preLoaderRoute: typeof AppAdminUsersRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/projects/$slug/': {
+      id: '/_app/projects/$slug/'
+      path: '/projects/$slug'
+      fullPath: '/projects/$slug/'
+      preLoaderRoute: typeof AppProjectsSlugIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/projects/$slug/members': {
+      id: '/_app/projects/$slug/members'
+      path: '/projects/$slug/members'
+      fullPath: '/projects/$slug/members'
+      preLoaderRoute: typeof AppProjectsSlugMembersRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/projects/$slug/$collection': {
+      id: '/_app/projects/$slug/$collection'
+      path: '/projects/$slug/$collection'
+      fullPath: '/projects/$slug/$collection'
+      preLoaderRoute: typeof AppProjectsSlugCollectionRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/api/public/specs/$project/$collection/$': {
+      id: '/api/public/specs/$project/$collection/$'
+      path: '/api/public/specs/$project/$collection/$'
+      fullPath: '/api/public/specs/$project/$collection/$'
+      preLoaderRoute: typeof ApiPublicSpecsProjectCollectionSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
+interface AppRouteChildren {
+  AppAdminUsersRoute: typeof AppAdminUsersRoute
+  AppProjectsIndexRoute: typeof AppProjectsIndexRoute
+  AppProjectsSlugCollectionRoute: typeof AppProjectsSlugCollectionRoute
+  AppProjectsSlugMembersRoute: typeof AppProjectsSlugMembersRoute
+  AppProjectsSlugIndexRoute: typeof AppProjectsSlugIndexRoute
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppAdminUsersRoute: AppAdminUsersRoute,
+  AppProjectsIndexRoute: AppProjectsIndexRoute,
+  AppProjectsSlugCollectionRoute: AppProjectsSlugCollectionRoute,
+  AppProjectsSlugMembersRoute: AppProjectsSlugMembersRoute,
+  AppProjectsSlugIndexRoute: AppProjectsSlugIndexRoute,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AppRoute: AppRouteWithChildren,
+  DocsRoute: DocsRoute,
+  LoginRoute: LoginRoute,
+  RegisterRoute: RegisterRoute,
+  ApiPublicSpecsProjectCollectionSplatRoute:
+    ApiPublicSpecsProjectCollectionSplatRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
