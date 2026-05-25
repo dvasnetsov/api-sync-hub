@@ -1462,32 +1462,48 @@ function enrichSpecForApidogImport(specText: string): string {
 }
 
 function normalizeSecurityForApidogImport(parsed: Record<string, unknown>) {
-  const components = parsed.components;
+  // Non-destructive. Apidog's export-openapi often inlines inherited auth into
+  // `x-apidog.use.configs.{schemeName}` on each operation but omits the matching
+  // entries from `components.securitySchemes`. On import that auth is lost. We
+  // materialize the missing schemes and ensure each operation declares them in
+  // `security` so Apidog re-attaches the auth to every endpoint. Existing
+  // `security` entries are preserved.
+  const components =
+    parsed.components && typeof parsed.components === "object" && !Array.isArray(parsed.components)
+      ? (parsed.components as Record<string, unknown>)
+      : ((parsed.components = {}) as Record<string, unknown>);
   const securitySchemes =
-    components && typeof components === "object"
-      ? (components as Record<string, unknown>).securitySchemes
-      : null;
-  if (!securitySchemes || typeof securitySchemes !== "object" || Array.isArray(securitySchemes)) {
-    return;
-  }
+    components.securitySchemes &&
+    typeof components.securitySchemes === "object" &&
+    !Array.isArray(components.securitySchemes)
+      ? (components.securitySchemes as Record<string, unknown>)
+      : ((components.securitySchemes = {}) as Record<string, unknown>);
 
-  const schemeNames = new Set(Object.keys(securitySchemes));
-  const normalizeRequirement = (value: unknown): Record<string, unknown> | null => {
-    if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-    const source = value as Record<string, unknown>;
-    const next: Record<string, unknown> = {};
+  const inferScheme = (key: string, config: unknown): Record<string, unknown> => {
+    const c =
+      config && typeof config === "object" && !Array.isArray(config)
+        ? (config as Record<string, unknown>)
+        : {};
+    const type = typeof c.type === "string" ? (c.type as string).toLowerCase() : "";
+    const inName = typeof c.in === "string" ? (c.in as string).toLowerCase() : "header";
+    const name = typeof c.name === "string" ? (c.name as string) : "Authorization";
+    if (type === "bearer" || /bearer/i.test(key)) return { type: "http", scheme: "bearer" };
+    if (type === "basic" || /basic/i.test(key)) return { type: "http", scheme: "basic" };
+    if (type === "oauth2" || /oauth/i.test(key)) return { type: "oauth2", flows: {} };
+    if (type === "openidconnect" || /openid/i.test(key))
+      return { type: "openIdConnect", openIdConnectUrl: "" };
+    return { type: "apiKey", in: inName, name };
+  };
 
-    for (const [key, rawScopes] of Object.entries(source)) {
-      if (key === "x-apidog" || !schemeNames.has(key)) continue;
-      next[key] = Array.isArray(rawScopes)
-        ? rawScopes.filter((scope): scope is string => typeof scope === "string")
-        : [];
+  const ensureScheme = (schemeName: string, config: unknown) => {
+    if (!schemeName) return;
+    if (!(schemeName in securitySchemes)) {
+      securitySchemes[schemeName] = inferScheme(schemeName, config);
     }
+  };
 
-    const apidog = source["x-apidog"];
-    if (apidog && typeof apidog === "object" && !Array.isArray(apidog)) {
-      next["x-apidog"] = apidog;
-    }
+  const visit = (operation: Record<string, unknown>) => {
+    const apidog = operation["x-apidog"];
     const use =
       apidog && typeof apidog === "object" && !Array.isArray(apidog)
         ? (apidog as Record<string, unknown>).use
@@ -1496,25 +1512,19 @@ function normalizeSecurityForApidogImport(parsed: Record<string, unknown>) {
       use && typeof use === "object" && !Array.isArray(use)
         ? (use as Record<string, unknown>).configs
         : null;
-    if (configs && typeof configs === "object" && !Array.isArray(configs)) {
-      for (const key of Object.keys(configs)) {
-        if (schemeNames.has(key)) next[key] ??= [];
-      }
+    if (!configs || typeof configs !== "object" || Array.isArray(configs)) return;
+    const security = Array.isArray(operation.security)
+      ? [...(operation.security as Record<string, unknown>[])]
+      : [];
+    for (const [key, cfg] of Object.entries(configs as Record<string, unknown>)) {
+      ensureScheme(key, cfg);
+      const already = security.some(
+        (req) => req && typeof req === "object" && !Array.isArray(req) && key in req,
+      );
+      if (!already) security.push({ [key]: [] });
     }
-
-    return Object.keys(next).length > 0 ? next : null;
+    if (security.length > 0) operation.security = security;
   };
-
-  const normalizeSecurityArray = (value: unknown): Record<string, unknown>[] | null => {
-    if (!Array.isArray(value)) return null;
-    const normalized = value
-      .map(normalizeRequirement)
-      .filter((item): item is Record<string, unknown> => !!item);
-    return normalized.length > 0 ? normalized : value.length === 0 ? [] : null;
-  };
-
-  const rootSecurity = normalizeSecurityArray(parsed.security);
-  if (rootSecurity) parsed.security = rootSecurity;
 
   const paths = parsed.paths;
   if (!paths || typeof paths !== "object" || Array.isArray(paths)) return;
@@ -1530,9 +1540,7 @@ function normalizeSecurityForApidogImport(parsed: Record<string, unknown>) {
       ) {
         continue;
       }
-      const operation = op as Record<string, unknown>;
-      const security = normalizeSecurityArray(operation.security);
-      if (security) operation.security = security;
+      visit(op as Record<string, unknown>);
     }
   }
 }
