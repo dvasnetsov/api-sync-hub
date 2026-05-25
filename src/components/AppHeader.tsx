@@ -54,18 +54,18 @@ export function AppHeader() {
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="flex items-center gap-2 rounded-md border border-border bg-card px-2.5 py-1.5 text-sm hover:bg-secondary">
-                <span className="grid h-6 w-6 place-items-center rounded-full bg-foreground font-mono text-[10px] font-bold text-background uppercase">
+              <button className="flex items-center gap-2 rounded-md border border-border bg-background px-2.5 py-1.5 text-sm hover:bg-muted/60 transition-colors">
+                <span className="grid h-6 w-6 place-items-center rounded-full bg-foreground text-[10px] font-semibold text-background uppercase tracking-wide">
                   {initial}
                 </span>
-                <span className="hidden text-sm sm:inline">{label}</span>
-                {meData?.isAdmin && <ShieldCheck className="h-3.5 w-3.5 text-primary" />}
+                <span className="hidden text-sm text-muted-foreground sm:inline">{label}</span>
+                {meData?.isAdmin && <ShieldCheck className="h-3.5 w-3.5 text-foreground/60" />}
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-48">
               {meData?.isAdmin && (
                 <DropdownMenuItem onClick={() => nav({ to: "/admin/users" })}>
-                  <ShieldCheck className="mr-2 h-4 w-4" /> Пользователи
+                  <ShieldCheck className="mr-2 h-4 w-4" /> Users
                 </DropdownMenuItem>
               )}
               <DropdownMenuSeparator />
