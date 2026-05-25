@@ -46,17 +46,14 @@ function ProjectsIndex() {
     <main className="mx-auto max-w-6xl px-6 py-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <p className="font-mono text-xs uppercase tracking-[0.25em] text-muted-foreground">
-            Workspace
-          </p>
-          <h1 className="mt-2 font-serif text-5xl text-foreground">Projects</h1>
+          <h1 className="text-3xl font-semibold tracking-tight text-foreground">Projects</h1>
           <p className="mt-2 max-w-md text-sm text-muted-foreground">
-            Each project groups related collections. Every collection becomes a permanent hosted
-            URL.
+            Group related OpenAPI collections. Each collection gets a stable hosted URL.
           </p>
         </div>
         <NewProjectDialog />
       </div>
+
 
       <div className="mt-8 flex items-center gap-3">
         <div className="relative max-w-sm flex-1">
