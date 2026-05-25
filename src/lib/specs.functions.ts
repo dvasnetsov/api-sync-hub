@@ -895,11 +895,16 @@ export const syncFromApidog = createServerFn({ method: "POST" })
           scope: { type: "ALL" },
           oasVersion: collection.oas_version,
           exportFormat: collection.export_format === "yaml" ? "YAML" : "JSON",
+          // Always send env ids when we have them — without this Apidog returns
+          // an empty `servers` block. We pull every env on the source project
+          // so the exported spec carries every base URL + variable set.
           ...(environmentExportData.ids.length > 0
             ? { environmentIds: environmentExportData.ids }
             : {}),
           options: {
             includeApidogExtensionProperties: true,
+            includeFolders: true,
+            includeServers: true,
             addFoldersToTags: true,
           },
         }),
