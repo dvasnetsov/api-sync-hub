@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { Logo } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
+import { lovable } from "@/integrations/lovable";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/login")({
@@ -20,14 +20,16 @@ function Login() {
 
   const google = async () => {
     setBusy(true);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: window.location.origin + "/projects" },
+    const result = await lovable.auth.signInWithOAuth("google", {
+      redirect_uri: window.location.origin + "/projects",
     });
-    if (error) {
-      toast.error("Google sign-in failed: " + error.message);
+    if (result.redirected) return;
+    if (result.error) {
+      toast.error("Google sign-in failed: " + result.error.message);
       setBusy(false);
+      return;
     }
+    window.location.href = "/projects";
   };
 
   return (
