@@ -1580,6 +1580,7 @@ function normalizeSecurityForApidogImport(parsed: Record<string, unknown>) {
   const paths = parsed.paths;
   if (!paths || typeof paths !== "object" || Array.isArray(paths)) return;
   const methods = new Set(["get", "post", "put", "patch", "delete", "options", "head", "trace"]);
+  let anyOpHasSecurity = false;
   for (const pathItem of Object.values(paths as Record<string, unknown>)) {
     if (!pathItem || typeof pathItem !== "object" || Array.isArray(pathItem)) continue;
     for (const [method, op] of Object.entries(pathItem as Record<string, unknown>)) {
@@ -1592,7 +1593,27 @@ function normalizeSecurityForApidogImport(parsed: Record<string, unknown>) {
         continue;
       }
       visit(op as Record<string, unknown>);
+      const rec = op as Record<string, unknown>;
+      if (Array.isArray(rec.security) && rec.security.length > 0) anyOpHasSecurity = true;
     }
+  }
+
+  // Apidog source exports often inherit auth at the project level: `securitySchemes`
+  // is defined but neither top-level `security` nor per-op `security` is set.
+  // On re-import every endpoint then shows "No Auth". Materialize a top-level
+  // `security` that requires ALL defined schemes so Apidog applies them by default.
+  const schemeNames = Object.keys(securitySchemes);
+  const topSecurity = Array.isArray(parsed.security)
+    ? (parsed.security as unknown[])
+    : [];
+  if (
+    schemeNames.length > 0 &&
+    !anyOpHasSecurity &&
+    topSecurity.length === 0
+  ) {
+    const requireAll: Record<string, string[]> = {};
+    for (const name of schemeNames) requireAll[name] = [];
+    parsed.security = [requireAll];
   }
 }
 
