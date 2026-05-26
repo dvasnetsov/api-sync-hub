@@ -827,15 +827,37 @@ function filterSpecServersForPush(
   specText: string,
   fmt: ExportFormat,
   selectedUrls: string[],
+  knownServers: ApidogServerDTO[],
 ): string {
   if (fmt !== "json") return specText;
+  if (selectedUrls.length === 0) return specText;
   const selected = new Set(selectedUrls);
-  if (selected.size === 0) return specText;
   try {
     const parsed = JSON.parse(specText) as Record<string, unknown>;
-    const servers = normalizeApidogServers(parsed.servers);
-    if (servers.length === 0) return specText;
-    parsed.servers = servers.filter((server) => selected.has(server.url));
+    const existing = normalizeApidogServers(parsed.servers);
+    // Build the final servers array from existing spec servers (filtered) plus
+    // any selected URL missing from the spec, hydrated from `knownServers`
+    // (collection.apidog_servers — populated from pull or manually).
+    const byUrl = new Map<string, ApidogServerDTO>();
+    for (const server of existing) {
+      if (selected.has(server.url)) byUrl.set(server.url, server);
+    }
+    const knownByUrl = new Map(knownServers.map((s) => [s.url, s]));
+    for (const url of selectedUrls) {
+      if (!byUrl.has(url)) {
+        const known = knownByUrl.get(url);
+        byUrl.set(url, {
+          url,
+          description: known?.description ?? null,
+          variables: known?.variables ?? {},
+        });
+      }
+    }
+    parsed.servers = [...byUrl.values()].map((s) => ({
+      url: s.url,
+      ...(s.description ? { description: s.description } : {}),
+      ...(Object.keys(s.variables).length > 0 ? { variables: s.variables } : {}),
+    }));
     return JSON.stringify(parsed);
   } catch {
     return specText;
