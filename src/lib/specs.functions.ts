@@ -326,38 +326,52 @@ async function fetchEnvironmentExportDataFromApidog({
   projectId: string;
   token: string;
 }): Promise<ApidogEnvironmentExportData> {
-  const url = `https://api.apidog.com/v1/projects/${encodeURIComponent(projectId)}/environments`;
-  try {
-    const res = await fetch(url, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "X-Apidog-Api-Version": "2024-03-28",
-        Accept: "application/json",
-      },
-    });
-    if (!res.ok) {
-      console.warn(`[pull] Apidog environments ${res.status}: ${(await res.text()).slice(0, 200)}`);
-      return { ids: [], servers: [] };
-    }
-    const payload = await res.json().catch(() => ({}));
-    const normalized = getArrayRows(payload, [
-      "data",
-      "items",
-      "list",
-      "environments",
-      "records",
-    ]).map(normalizeEnvironmentForExport);
-    return {
-      ids: [...new Set(normalized.map((item) => item.id).filter((id): id is number => !!id))],
-      servers: normalized
+  // Apidog has shipped the environments listing under several paths over time.
+  // We try them in order — first match with a parseable body wins.
+  const candidates = [
+    `https://api.apidog.com/v1/projects/${encodeURIComponent(projectId)}/environments`,
+    `https://api.apidog.com/api/v1/projects/${encodeURIComponent(projectId)}/environments`,
+    `https://api.apidog.com/v1/projects/${encodeURIComponent(projectId)}/environments?detail=true`,
+  ];
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    "X-Apidog-Api-Version": "2024-03-28",
+    Accept: "application/json",
+  };
+  for (const url of candidates) {
+    try {
+      const res = await fetch(url, { method: "GET", headers });
+      if (!res.ok) {
+        console.warn(`[pull] envs ${url} → ${res.status}`);
+        continue;
+      }
+      const payload = await res.json().catch(() => ({}));
+      const normalized = getArrayRows(payload, [
+        "data",
+        "items",
+        "list",
+        "environments",
+        "records",
+      ]).map(normalizeEnvironmentForExport);
+      const ids = [
+        ...new Set(normalized.map((item) => item.id).filter((id): id is number => !!id)),
+      ];
+      const servers = normalized
         .map((item) => item.server)
-        .filter((server): server is ApidogServerDTO => !!server),
-    };
-  } catch (e) {
-    console.warn("[pull] Apidog environments failed", e);
-    return { ids: [], servers: [] };
+        .filter((server): server is ApidogServerDTO => !!server);
+      if (ids.length > 0 || servers.length > 0) {
+        console.log(`[pull] envs from ${url}: ${ids.length} ids, ${servers.length} servers`);
+        return { ids, servers };
+      }
+    } catch (e) {
+      console.warn(`[pull] envs ${url} failed`, e);
+    }
   }
+  // Fallback: probe IDs 1..30 via export-openapi to discover envs Apidog has
+  // (imitates "select all" in the Export UI). Cheap because we just need
+  // Apidog to echo back whatever IDs it accepts via servers.
+  console.warn("[pull] no env list endpoint worked, falling back to probe range 1..30");
+  return { ids: Array.from({ length: 30 }, (_, i) => i + 1), servers: [] };
 }
 
 function mergeServers(...groups: ApidogServerDTO[][]): ApidogServerDTO[] {
