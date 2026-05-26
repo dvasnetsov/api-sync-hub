@@ -326,38 +326,52 @@ async function fetchEnvironmentExportDataFromApidog({
   projectId: string;
   token: string;
 }): Promise<ApidogEnvironmentExportData> {
-  const url = `https://api.apidog.com/v1/projects/${encodeURIComponent(projectId)}/environments`;
-  try {
-    const res = await fetch(url, {
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "X-Apidog-Api-Version": "2024-03-28",
-        Accept: "application/json",
-      },
-    });
-    if (!res.ok) {
-      console.warn(`[pull] Apidog environments ${res.status}: ${(await res.text()).slice(0, 200)}`);
-      return { ids: [], servers: [] };
-    }
-    const payload = await res.json().catch(() => ({}));
-    const normalized = getArrayRows(payload, [
-      "data",
-      "items",
-      "list",
-      "environments",
-      "records",
-    ]).map(normalizeEnvironmentForExport);
-    return {
-      ids: [...new Set(normalized.map((item) => item.id).filter((id): id is number => !!id))],
-      servers: normalized
+  // Apidog has shipped the environments listing under several paths over time.
+  // We try them in order — first match with a parseable body wins.
+  const candidates = [
+    `https://api.apidog.com/v1/projects/${encodeURIComponent(projectId)}/environments`,
+    `https://api.apidog.com/api/v1/projects/${encodeURIComponent(projectId)}/environments`,
+    `https://api.apidog.com/v1/projects/${encodeURIComponent(projectId)}/environments?detail=true`,
+  ];
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    "X-Apidog-Api-Version": "2024-03-28",
+    Accept: "application/json",
+  };
+  for (const url of candidates) {
+    try {
+      const res = await fetch(url, { method: "GET", headers });
+      if (!res.ok) {
+        console.warn(`[pull] envs ${url} → ${res.status}`);
+        continue;
+      }
+      const payload = await res.json().catch(() => ({}));
+      const normalized = getArrayRows(payload, [
+        "data",
+        "items",
+        "list",
+        "environments",
+        "records",
+      ]).map(normalizeEnvironmentForExport);
+      const ids = [
+        ...new Set(normalized.map((item) => item.id).filter((id): id is number => !!id)),
+      ];
+      const servers = normalized
         .map((item) => item.server)
-        .filter((server): server is ApidogServerDTO => !!server),
-    };
-  } catch (e) {
-    console.warn("[pull] Apidog environments failed", e);
-    return { ids: [], servers: [] };
+        .filter((server): server is ApidogServerDTO => !!server);
+      if (ids.length > 0 || servers.length > 0) {
+        console.log(`[pull] envs from ${url}: ${ids.length} ids, ${servers.length} servers`);
+        return { ids, servers };
+      }
+    } catch (e) {
+      console.warn(`[pull] envs ${url} failed`, e);
+    }
   }
+  // Fallback: probe IDs 1..30 via export-openapi to discover envs Apidog has
+  // (imitates "select all" in the Export UI). Cheap because we just need
+  // Apidog to echo back whatever IDs it accepts via servers.
+  console.warn("[pull] no env list endpoint worked, falling back to probe range 1..30");
+  return { ids: Array.from({ length: 30 }, (_, i) => i + 1), servers: [] };
 }
 
 function mergeServers(...groups: ApidogServerDTO[][]): ApidogServerDTO[] {
@@ -813,15 +827,37 @@ function filterSpecServersForPush(
   specText: string,
   fmt: ExportFormat,
   selectedUrls: string[],
+  knownServers: ApidogServerDTO[],
 ): string {
   if (fmt !== "json") return specText;
+  if (selectedUrls.length === 0) return specText;
   const selected = new Set(selectedUrls);
-  if (selected.size === 0) return specText;
   try {
     const parsed = JSON.parse(specText) as Record<string, unknown>;
-    const servers = normalizeApidogServers(parsed.servers);
-    if (servers.length === 0) return specText;
-    parsed.servers = servers.filter((server) => selected.has(server.url));
+    const existing = normalizeApidogServers(parsed.servers);
+    // Build the final servers array from existing spec servers (filtered) plus
+    // any selected URL missing from the spec, hydrated from `knownServers`
+    // (collection.apidog_servers — populated from pull or manually).
+    const byUrl = new Map<string, ApidogServerDTO>();
+    for (const server of existing) {
+      if (selected.has(server.url)) byUrl.set(server.url, server);
+    }
+    const knownByUrl = new Map(knownServers.map((s) => [s.url, s]));
+    for (const url of selectedUrls) {
+      if (!byUrl.has(url)) {
+        const known = knownByUrl.get(url);
+        byUrl.set(url, {
+          url,
+          description: known?.description ?? null,
+          variables: known?.variables ?? {},
+        });
+      }
+    }
+    parsed.servers = [...byUrl.values()].map((s) => ({
+      url: s.url,
+      ...(s.description ? { description: s.description } : {}),
+      ...(Object.keys(s.variables).length > 0 ? { variables: s.variables } : {}),
+    }));
     return JSON.stringify(parsed);
   } catch {
     return specText;
@@ -986,8 +1022,12 @@ export const syncFromApidog = createServerFn({ method: "POST" })
 
     const specServers = ok ? extractServersFromSpecText(bodyText, collection.export_format) : [];
     const pulledServers = mergeServers(specServers, ok ? environmentExportData.servers : []);
+    // If neither the spec nor the env probe yielded servers, keep whatever the
+    // user already had on the collection (manually entered or previously pulled).
+    const previousServers = normalizeApidogServers(collection.apidog_servers);
+    const effectiveServers = pulledServers.length > 0 ? pulledServers : previousServers;
     const selectedServerUrls = selectServerUrlsAfterPull(
-      pulledServers,
+      effectiveServers,
       collection.apidog_server_urls,
     );
 
@@ -1000,7 +1040,7 @@ export const syncFromApidog = createServerFn({ method: "POST" })
           ? {
               endpoints,
               size_bytes: sizeBytes,
-              apidog_servers: pulledServers,
+              apidog_servers: effectiveServers,
               apidog_server_urls: selectedServerUrls,
             }
           : {}),
@@ -1204,8 +1244,14 @@ export const pushToApidog = createServerFn({ method: "POST" })
       const selectedServerUrls = collection.apidog_sync_environments
         ? normalizeStringArray(collection.apidog_server_urls)
         : [];
+      const knownServers = normalizeApidogServers(collection.apidog_servers);
       const specTextForPush = enrichSpecForApidogImport(
-        filterSpecServersForPush(specText, collection.export_format, selectedServerUrls),
+        filterSpecServersForPush(
+          specText,
+          collection.export_format,
+          selectedServerUrls,
+          knownServers,
+        ),
       );
 
       let endpoints = 0;
@@ -1534,6 +1580,7 @@ function normalizeSecurityForApidogImport(parsed: Record<string, unknown>) {
   const paths = parsed.paths;
   if (!paths || typeof paths !== "object" || Array.isArray(paths)) return;
   const methods = new Set(["get", "post", "put", "patch", "delete", "options", "head", "trace"]);
+  let anyOpHasSecurity = false;
   for (const pathItem of Object.values(paths as Record<string, unknown>)) {
     if (!pathItem || typeof pathItem !== "object" || Array.isArray(pathItem)) continue;
     for (const [method, op] of Object.entries(pathItem as Record<string, unknown>)) {
@@ -1546,7 +1593,27 @@ function normalizeSecurityForApidogImport(parsed: Record<string, unknown>) {
         continue;
       }
       visit(op as Record<string, unknown>);
+      const rec = op as Record<string, unknown>;
+      if (Array.isArray(rec.security) && rec.security.length > 0) anyOpHasSecurity = true;
     }
+  }
+
+  // Apidog source exports often inherit auth at the project level: `securitySchemes`
+  // is defined but neither top-level `security` nor per-op `security` is set.
+  // On re-import every endpoint then shows "No Auth". Materialize a top-level
+  // `security` that requires ALL defined schemes so Apidog applies them by default.
+  const schemeNames = Object.keys(securitySchemes);
+  const topSecurity = Array.isArray(parsed.security)
+    ? (parsed.security as unknown[])
+    : [];
+  if (
+    schemeNames.length > 0 &&
+    !anyOpHasSecurity &&
+    topSecurity.length === 0
+  ) {
+    const requireAll: Record<string, string[]> = {};
+    for (const name of schemeNames) requireAll[name] = [];
+    parsed.security = [requireAll];
   }
 }
 
