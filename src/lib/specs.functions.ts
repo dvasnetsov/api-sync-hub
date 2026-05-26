@@ -1000,8 +1000,12 @@ export const syncFromApidog = createServerFn({ method: "POST" })
 
     const specServers = ok ? extractServersFromSpecText(bodyText, collection.export_format) : [];
     const pulledServers = mergeServers(specServers, ok ? environmentExportData.servers : []);
+    // If neither the spec nor the env probe yielded servers, keep whatever the
+    // user already had on the collection (manually entered or previously pulled).
+    const previousServers = normalizeApidogServers(collection.apidog_servers);
+    const effectiveServers = pulledServers.length > 0 ? pulledServers : previousServers;
     const selectedServerUrls = selectServerUrlsAfterPull(
-      pulledServers,
+      effectiveServers,
       collection.apidog_server_urls,
     );
 
@@ -1014,7 +1018,7 @@ export const syncFromApidog = createServerFn({ method: "POST" })
           ? {
               endpoints,
               size_bytes: sizeBytes,
-              apidog_servers: pulledServers,
+              apidog_servers: effectiveServers,
               apidog_server_urls: selectedServerUrls,
             }
           : {}),
