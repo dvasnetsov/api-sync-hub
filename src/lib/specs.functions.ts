@@ -1244,8 +1244,14 @@ export const pushToApidog = createServerFn({ method: "POST" })
       const selectedServerUrls = collection.apidog_sync_environments
         ? normalizeStringArray(collection.apidog_server_urls)
         : [];
+      const knownServers = normalizeApidogServers(collection.apidog_servers);
       const specTextForPush = enrichSpecForApidogImport(
-        filterSpecServersForPush(specText, collection.export_format, selectedServerUrls),
+        filterSpecServersForPush(
+          specText,
+          collection.export_format,
+          selectedServerUrls,
+          knownServers,
+        ),
       );
 
       let endpoints = 0;
