@@ -215,6 +215,59 @@ function normalizeJsonObject(raw: unknown): Record<string, Json | undefined> {
     : {};
 }
 
+function normalizeVariableMap(raw: unknown): Record<string, Json | undefined> {
+  const out: Record<string, Json | undefined> = {};
+  if (!raw) return out;
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+      const record = item as Record<string, unknown>;
+      const key = getStringField(record, ["key", "name", "variable", "variableName"]);
+      if (!key) continue;
+      const value =
+        record.currentValue ??
+        record.localValue ??
+        record.initialValue ??
+        record.defaultValue ??
+        record.value ??
+        "";
+      out[key] = toJsonValue(value) ?? "";
+    }
+    return out;
+  }
+  if (typeof raw !== "object") return out;
+  const record = raw as Record<string, unknown>;
+  for (const key of ["variables", "envVariables", "environmentVariables", "values"]) {
+    if (Array.isArray(record[key])) Object.assign(out, normalizeVariableMap(record[key]));
+  }
+  for (const [key, value] of Object.entries(record)) {
+    if (["variables", "envVariables", "environmentVariables", "values"].includes(key)) continue;
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const nested = value as Record<string, unknown>;
+      const nestedValue =
+        nested.currentValue ?? nested.localValue ?? nested.initialValue ?? nested.defaultValue ?? nested.value;
+      out[key] = toJsonValue(nestedValue ?? value) ?? "";
+    } else {
+      out[key] = toJsonValue(value) ?? "";
+    }
+  }
+  return out;
+}
+
+function toOpenApiServerVariables(
+  variables: Record<string, Json | undefined>,
+): Record<string, Json | undefined> {
+  const out: Record<string, Json | undefined> = {};
+  for (const [key, value] of Object.entries(variables)) {
+    if (value && typeof value === "object" && !Array.isArray(value) && "default" in value) {
+      out[key] = value;
+    } else if (value !== undefined) {
+      out[key] = { default: String(value ?? "") };
+    }
+  }
+  return out;
+}
+
 function normalizeApidogServers(raw: unknown): ApidogServerDTO[] {
   if (!Array.isArray(raw)) return [];
   const out: ApidogServerDTO[] = [];
@@ -309,9 +362,10 @@ function normalizeEnvironmentForExport(row: unknown): {
         url,
         description: name || nestedServers[0]?.description || null,
         variables: {
-          ...normalizeJsonObject(
-            getObjectField(record, ["variables", "envVariables", "environmentVariables", "values"]),
-          ),
+          ...normalizeVariableMap(record.variables),
+          ...normalizeVariableMap(record.envVariables),
+          ...normalizeVariableMap(record.environmentVariables),
+          ...normalizeVariableMap(record.values),
           ...nestedServers[0]?.variables,
         },
       }
@@ -370,8 +424,8 @@ async function fetchEnvironmentExportDataFromApidog({
   // Fallback: probe IDs 1..30 via export-openapi to discover envs Apidog has
   // (imitates "select all" in the Export UI). Cheap because we just need
   // Apidog to echo back whatever IDs it accepts via servers.
-  console.warn("[pull] no env list endpoint worked, falling back to probe range 1..30");
-  return { ids: Array.from({ length: 30 }, (_, i) => i + 1), servers: [] };
+  console.warn("[pull] no env list endpoint worked, falling back to probe range 1..100");
+  return { ids: Array.from({ length: 100 }, (_, i) => i + 1), servers: [] };
 }
 
 function mergeServers(...groups: ApidogServerDTO[][]): ApidogServerDTO[] {
@@ -856,7 +910,7 @@ function filterSpecServersForPush(
     parsed.servers = [...byUrl.values()].map((s) => ({
       url: s.url,
       ...(s.description ? { description: s.description } : {}),
-      ...(Object.keys(s.variables).length > 0 ? { variables: s.variables } : {}),
+      ...(Object.keys(s.variables).length > 0 ? { variables: toOpenApiServerVariables(s.variables) } : {}),
     }));
     return JSON.stringify(parsed);
   } catch {
@@ -950,6 +1004,9 @@ export const syncFromApidog = createServerFn({ method: "POST" })
         errMsg = `Apidog ${res.status}: ${t.slice(0, 200)}`;
       } else {
         bodyText = await res.text();
+        if (collection.export_format === "json") {
+          bodyText = enrichSpecForApidogImport(bodyText);
+        }
         if (collection.export_format === "json") {
           try {
             endpoints = countEndpoints(JSON.parse(bodyText));
