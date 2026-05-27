@@ -362,9 +362,7 @@ function normalizeEnvironmentForExport(row: unknown): {
         url,
         description: name || nestedServers[0]?.description || null,
         variables: {
-          ...normalizeJsonObject(
-            getObjectField(record, ["variables", "envVariables", "environmentVariables", "values"]),
-          ),
+          ...normalizeVariableMap(record),
           ...nestedServers[0]?.variables,
         },
       }
