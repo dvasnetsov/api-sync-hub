@@ -215,6 +215,59 @@ function normalizeJsonObject(raw: unknown): Record<string, Json | undefined> {
     : {};
 }
 
+function normalizeVariableMap(raw: unknown): Record<string, Json | undefined> {
+  const out: Record<string, Json | undefined> = {};
+  if (!raw) return out;
+  if (Array.isArray(raw)) {
+    for (const item of raw) {
+      if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+      const record = item as Record<string, unknown>;
+      const key = getStringField(record, ["key", "name", "variable", "variableName"]);
+      if (!key) continue;
+      const value =
+        record.currentValue ??
+        record.localValue ??
+        record.initialValue ??
+        record.defaultValue ??
+        record.value ??
+        "";
+      out[key] = toJsonValue(value) ?? "";
+    }
+    return out;
+  }
+  if (typeof raw !== "object") return out;
+  const record = raw as Record<string, unknown>;
+  for (const key of ["variables", "envVariables", "environmentVariables", "values"]) {
+    if (Array.isArray(record[key])) Object.assign(out, normalizeVariableMap(record[key]));
+  }
+  for (const [key, value] of Object.entries(record)) {
+    if (["variables", "envVariables", "environmentVariables", "values"].includes(key)) continue;
+    if (value && typeof value === "object" && !Array.isArray(value)) {
+      const nested = value as Record<string, unknown>;
+      const nestedValue =
+        nested.currentValue ?? nested.localValue ?? nested.initialValue ?? nested.defaultValue ?? nested.value;
+      out[key] = toJsonValue(nestedValue ?? value) ?? "";
+    } else {
+      out[key] = toJsonValue(value) ?? "";
+    }
+  }
+  return out;
+}
+
+function toOpenApiServerVariables(
+  variables: Record<string, Json | undefined>,
+): Record<string, Json | undefined> {
+  const out: Record<string, Json | undefined> = {};
+  for (const [key, value] of Object.entries(variables)) {
+    if (value && typeof value === "object" && !Array.isArray(value) && "default" in value) {
+      out[key] = value;
+    } else if (value !== undefined) {
+      out[key] = { default: String(value ?? "") };
+    }
+  }
+  return out;
+}
+
 function normalizeApidogServers(raw: unknown): ApidogServerDTO[] {
   if (!Array.isArray(raw)) return [];
   const out: ApidogServerDTO[] = [];
