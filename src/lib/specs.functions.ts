@@ -362,7 +362,10 @@ function normalizeEnvironmentForExport(row: unknown): {
         url,
         description: name || nestedServers[0]?.description || null,
         variables: {
-          ...normalizeVariableMap(record),
+          ...normalizeVariableMap(record.variables),
+          ...normalizeVariableMap(record.envVariables),
+          ...normalizeVariableMap(record.environmentVariables),
+          ...normalizeVariableMap(record.values),
           ...nestedServers[0]?.variables,
         },
       }
@@ -421,8 +424,8 @@ async function fetchEnvironmentExportDataFromApidog({
   // Fallback: probe IDs 1..30 via export-openapi to discover envs Apidog has
   // (imitates "select all" in the Export UI). Cheap because we just need
   // Apidog to echo back whatever IDs it accepts via servers.
-  console.warn("[pull] no env list endpoint worked, falling back to probe range 1..30");
-  return { ids: Array.from({ length: 30 }, (_, i) => i + 1), servers: [] };
+  console.warn("[pull] no env list endpoint worked, falling back to probe range 1..100");
+  return { ids: Array.from({ length: 100 }, (_, i) => i + 1), servers: [] };
 }
 
 function mergeServers(...groups: ApidogServerDTO[][]): ApidogServerDTO[] {
