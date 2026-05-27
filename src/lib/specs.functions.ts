@@ -910,7 +910,7 @@ function filterSpecServersForPush(
     parsed.servers = [...byUrl.values()].map((s) => ({
       url: s.url,
       ...(s.description ? { description: s.description } : {}),
-      ...(Object.keys(s.variables).length > 0 ? { variables: s.variables } : {}),
+      ...(Object.keys(s.variables).length > 0 ? { variables: toOpenApiServerVariables(s.variables) } : {}),
     }));
     return JSON.stringify(parsed);
   } catch {
@@ -1004,6 +1004,9 @@ export const syncFromApidog = createServerFn({ method: "POST" })
         errMsg = `Apidog ${res.status}: ${t.slice(0, 200)}`;
       } else {
         bodyText = await res.text();
+        if (collection.export_format === "json") {
+          bodyText = enrichSpecForApidogImport(bodyText);
+        }
         if (collection.export_format === "json") {
           try {
             endpoints = countEndpoints(JSON.parse(bodyText));
