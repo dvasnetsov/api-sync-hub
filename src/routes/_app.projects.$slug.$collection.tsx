@@ -13,6 +13,7 @@ import { PostmanCard } from "@/components/collection/PostmanCard";
 import { WorkflowSteps } from "@/components/collection/WorkflowSteps";
 import { HistoryTab } from "@/components/collection/HistoryTab";
 import { SettingsTab } from "@/components/collection/SettingsTab";
+import { EnvironmentsTab } from "@/components/collection/EnvironmentsTab";
 import { formatBytes, formatRelative, specPublicUrl } from "@/lib/format";
 import { getCollection, pushToApidog, syncFromApidog } from "@/lib/specs.functions";
 import {
