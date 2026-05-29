@@ -333,16 +333,39 @@ function getArrayRows(payload: unknown, keys: string[]): unknown[] {
   return [];
 }
 
+export type ApidogEnvironmentEntry = {
+  id: number | null;
+  name: string;
+  baseUrl: string | null;
+  variables: Record<string, string>;
+};
+
 type ApidogEnvironmentExportData = {
   ids: number[];
   servers: ApidogServerDTO[];
+  entries: ApidogEnvironmentEntry[];
 };
+
+function variableMapToStringMap(map: Record<string, Json | undefined>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(map)) {
+    if (v == null) {
+      out[k] = "";
+    } else if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") {
+      out[k] = String(v);
+    } else {
+      out[k] = JSON.stringify(v);
+    }
+  }
+  return out;
+}
 
 function normalizeEnvironmentForExport(row: unknown): {
   id: number | null;
   server: ApidogServerDTO | null;
+  entry: ApidogEnvironmentEntry | null;
 } {
-  if (!row || typeof row !== "object") return { id: null, server: null };
+  if (!row || typeof row !== "object") return { id: null, server: null, entry: null };
   const record = row as Record<string, unknown>;
   const id = getNumberField(record, ["id", "environmentId", "envId", "environment_id"]);
   const name = getStringField(record, ["name", "title", "envName", "environmentName"]);
@@ -357,20 +380,30 @@ function normalizeEnvironmentForExport(row: unknown): {
   ]);
   const nestedServers = normalizeApidogServers(record.servers);
   const url = directUrl || nestedServers[0]?.url || "";
+  const variables = {
+    ...normalizeVariableMap(record.variables),
+    ...normalizeVariableMap(record.envVariables),
+    ...normalizeVariableMap(record.environmentVariables),
+    ...normalizeVariableMap(record.values),
+    ...nestedServers[0]?.variables,
+  };
   const server = url
     ? {
         url,
         description: name || nestedServers[0]?.description || null,
-        variables: {
-          ...normalizeVariableMap(record.variables),
-          ...normalizeVariableMap(record.envVariables),
-          ...normalizeVariableMap(record.environmentVariables),
-          ...normalizeVariableMap(record.values),
-          ...nestedServers[0]?.variables,
-        },
+        variables,
       }
     : null;
-  return { id, server };
+  const entry: ApidogEnvironmentEntry | null =
+    name || url || Object.keys(variables).length > 0
+      ? {
+          id,
+          name: name || (url ? url : `env-${id ?? "unknown"}`),
+          baseUrl: url || null,
+          variables: variableMapToStringMap(variables),
+        }
+      : null;
+  return { id, server, entry };
 }
 
 async function fetchEnvironmentExportDataFromApidog({
