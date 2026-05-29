@@ -143,6 +143,34 @@ export const publishToPostman = createServerFn({ method: "POST" })
         throw new Error(message);
       }
 
+      // Merge env variables into the collection's `variable[]` so users get
+      // sensible defaults even before they pick an environment.
+      const { data: envRows } = await supabaseAdmin
+        .from("collection_environments")
+        .select("name, base_url, variables, source")
+        .eq("collection_id", collection.id);
+      const envList = envRows ?? [];
+      if (envList.length > 0) {
+        const merged: Record<string, string> = {};
+        for (const e of envList) {
+          if (e.base_url && !merged.baseUrl) merged.baseUrl = String(e.base_url);
+          const vars = (e.variables ?? {}) as Record<string, unknown>;
+          for (const [k, v] of Object.entries(vars)) {
+            if (merged[k] !== undefined) continue;
+            merged[k] = v == null ? "" : typeof v === "string" ? v : String(v);
+          }
+        }
+        const existing = Array.isArray(collectionJson.variable) ? collectionJson.variable : [];
+        const existingKeys = new Set(
+          (existing as Array<{ key?: string }>).map((v) => v?.key).filter(Boolean) as string[],
+        );
+        const additions = Object.entries(merged)
+          .filter(([k]) => !existingKeys.has(k))
+          .map(([key, value]) => ({ key, value, type: "default" as const }));
+        collectionJson.variable = [...existing, ...additions];
+      }
+
+
       const existingId = collection.postman_collection_id as string | null;
       const workspaceId = collection.postman_workspace_id as string | null;
 
