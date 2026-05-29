@@ -115,7 +115,7 @@ function CollectionDetail() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const [tab, setTab] = useState<"overview" | "history" | "settings">("overview");
+  const [tab, setTab] = useState<"overview" | "environments" | "history" | "settings">("overview");
 
   if (isLoading) {
     return (
