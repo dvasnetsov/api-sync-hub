@@ -446,19 +446,24 @@ async function fetchEnvironmentExportDataFromApidog({
       const servers = normalized
         .map((item) => item.server)
         .filter((server): server is ApidogServerDTO => !!server);
-      if (ids.length > 0 || servers.length > 0) {
-        console.log(`[pull] envs from ${url}: ${ids.length} ids, ${servers.length} servers`);
-        return { ids, servers };
+      const entries = normalized
+        .map((item) => item.entry)
+        .filter((e): e is ApidogEnvironmentEntry => !!e);
+      if (ids.length > 0 || servers.length > 0 || entries.length > 0) {
+        console.log(
+          `[pull] envs from ${url}: ${ids.length} ids, ${servers.length} servers, ${entries.length} entries`,
+        );
+        return { ids, servers, entries };
       }
     } catch (e) {
       console.warn(`[pull] envs ${url} failed`, e);
     }
   }
-  // Fallback: probe IDs 1..30 via export-openapi to discover envs Apidog has
+  // Fallback: probe IDs 1..100 via export-openapi to discover envs Apidog has
   // (imitates "select all" in the Export UI). Cheap because we just need
   // Apidog to echo back whatever IDs it accepts via servers.
   console.warn("[pull] no env list endpoint worked, falling back to probe range 1..100");
-  return { ids: Array.from({ length: 100 }, (_, i) => i + 1), servers: [] };
+  return { ids: Array.from({ length: 100 }, (_, i) => i + 1), servers: [], entries: [] };
 }
 
 function mergeServers(...groups: ApidogServerDTO[][]): ApidogServerDTO[] {
