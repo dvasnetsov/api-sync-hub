@@ -1092,6 +1092,38 @@ export const syncFromApidog = createServerFn({ method: "POST" })
       .select("id, at, status, source, endpoints, size_bytes, message")
       .single();
 
+    // Replace apidog-sourced environments with whatever the pull returned.
+    // Uploaded/manual rows are left untouched.
+    if (ok && environmentExportData.entries.length > 0) {
+      try {
+        await supabaseAdmin
+          .from("collection_environments")
+          .delete()
+          .eq("collection_id", collection.id)
+          .eq("source", "apidog");
+        const rows = environmentExportData.entries.map((e, i) => ({
+          collection_id: collection.id,
+          name: e.name || `env-${e.id ?? i + 1}`,
+          source: "apidog" as const,
+          apidog_env_id: e.id,
+          base_url: e.baseUrl,
+          variables: e.variables,
+        }));
+        // Deduplicate by name (DB has UNIQUE(collection_id, name)).
+        const seen = new Set<string>();
+        const deduped = rows.filter((r) => {
+          if (seen.has(r.name)) return false;
+          seen.add(r.name);
+          return true;
+        });
+        if (deduped.length > 0) {
+          await supabaseAdmin.from("collection_environments").insert(deduped);
+        }
+      } catch (e) {
+        console.warn("[pull] failed to persist environments", e);
+      }
+    }
+
     // Markdown pull: fetch markdown pages from Apidog and store them on the collection
     // so they show in the UI and can be re-pushed. Gated by apidog_sync_markdowns.
     let pulledMd: ManualMarkdown[] | null = null;
