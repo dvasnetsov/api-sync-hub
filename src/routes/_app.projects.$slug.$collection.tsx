@@ -355,6 +355,14 @@ function CollectionDetail() {
           </div>
         </TabsContent>
 
+        <TabsContent value="environments" className="mt-6">
+          <EnvironmentsTab
+            projectSlug={project.slug}
+            collectionSlug={c.slug}
+            postmanReady={c.postmanApiKeyConfigured}
+          />
+        </TabsContent>
+
         <TabsContent value="history" className="mt-6">
           <HistoryTab history={history} />
         </TabsContent>
