@@ -14,6 +14,45 @@ export type Database = {
   }
   public: {
     Tables: {
+      collection_environments: {
+        Row: {
+          apidog_env_id: number | null
+          base_url: string | null
+          collection_id: string
+          created_at: string
+          id: string
+          name: string
+          postman_env_uid: string | null
+          source: Database["public"]["Enums"]["env_source"]
+          updated_at: string
+          variables: Json
+        }
+        Insert: {
+          apidog_env_id?: number | null
+          base_url?: string | null
+          collection_id: string
+          created_at?: string
+          id?: string
+          name: string
+          postman_env_uid?: string | null
+          source?: Database["public"]["Enums"]["env_source"]
+          updated_at?: string
+          variables?: Json
+        }
+        Update: {
+          apidog_env_id?: number | null
+          base_url?: string | null
+          collection_id?: string
+          created_at?: string
+          id?: string
+          name?: string
+          postman_env_uid?: string | null
+          source?: Database["public"]["Enums"]["env_source"]
+          updated_at?: string
+          variables?: Json
+        }
+        Relationships: []
+      }
       collections: {
         Row: {
           apidog_auto_publish: boolean
@@ -391,6 +430,7 @@ export type Database = {
         | "KEEP_EXISTING"
         | "CREATE_NEW"
       app_role: "admin" | "user"
+      env_source: "apidog" | "uploaded" | "manual"
       export_format: "json" | "yaml"
       oas_version: "3.1" | "3.0" | "2.0"
       sync_source: "apidog" | "upload" | "manual"
@@ -529,6 +569,7 @@ export const Constants = {
         "CREATE_NEW",
       ],
       app_role: ["admin", "user"],
+      env_source: ["apidog", "uploaded", "manual"],
       export_format: ["json", "yaml"],
       oas_version: ["3.1", "3.0", "2.0"],
       sync_source: ["apidog", "upload", "manual"],

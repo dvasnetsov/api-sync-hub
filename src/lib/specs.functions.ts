@@ -333,16 +333,39 @@ function getArrayRows(payload: unknown, keys: string[]): unknown[] {
   return [];
 }
 
+export type ApidogEnvironmentEntry = {
+  id: number | null;
+  name: string;
+  baseUrl: string | null;
+  variables: Record<string, string>;
+};
+
 type ApidogEnvironmentExportData = {
   ids: number[];
   servers: ApidogServerDTO[];
+  entries: ApidogEnvironmentEntry[];
 };
+
+function variableMapToStringMap(map: Record<string, Json | undefined>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(map)) {
+    if (v == null) {
+      out[k] = "";
+    } else if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") {
+      out[k] = String(v);
+    } else {
+      out[k] = JSON.stringify(v);
+    }
+  }
+  return out;
+}
 
 function normalizeEnvironmentForExport(row: unknown): {
   id: number | null;
   server: ApidogServerDTO | null;
+  entry: ApidogEnvironmentEntry | null;
 } {
-  if (!row || typeof row !== "object") return { id: null, server: null };
+  if (!row || typeof row !== "object") return { id: null, server: null, entry: null };
   const record = row as Record<string, unknown>;
   const id = getNumberField(record, ["id", "environmentId", "envId", "environment_id"]);
   const name = getStringField(record, ["name", "title", "envName", "environmentName"]);
@@ -357,20 +380,30 @@ function normalizeEnvironmentForExport(row: unknown): {
   ]);
   const nestedServers = normalizeApidogServers(record.servers);
   const url = directUrl || nestedServers[0]?.url || "";
+  const variables = {
+    ...normalizeVariableMap(record.variables),
+    ...normalizeVariableMap(record.envVariables),
+    ...normalizeVariableMap(record.environmentVariables),
+    ...normalizeVariableMap(record.values),
+    ...nestedServers[0]?.variables,
+  };
   const server = url
     ? {
         url,
         description: name || nestedServers[0]?.description || null,
-        variables: {
-          ...normalizeVariableMap(record.variables),
-          ...normalizeVariableMap(record.envVariables),
-          ...normalizeVariableMap(record.environmentVariables),
-          ...normalizeVariableMap(record.values),
-          ...nestedServers[0]?.variables,
-        },
+        variables,
       }
     : null;
-  return { id, server };
+  const entry: ApidogEnvironmentEntry | null =
+    name || url || Object.keys(variables).length > 0
+      ? {
+          id,
+          name: name || (url ? url : `env-${id ?? "unknown"}`),
+          baseUrl: url || null,
+          variables: variableMapToStringMap(variables),
+        }
+      : null;
+  return { id, server, entry };
 }
 
 async function fetchEnvironmentExportDataFromApidog({
@@ -413,19 +446,24 @@ async function fetchEnvironmentExportDataFromApidog({
       const servers = normalized
         .map((item) => item.server)
         .filter((server): server is ApidogServerDTO => !!server);
-      if (ids.length > 0 || servers.length > 0) {
-        console.log(`[pull] envs from ${url}: ${ids.length} ids, ${servers.length} servers`);
-        return { ids, servers };
+      const entries = normalized
+        .map((item) => item.entry)
+        .filter((e): e is ApidogEnvironmentEntry => !!e);
+      if (ids.length > 0 || servers.length > 0 || entries.length > 0) {
+        console.log(
+          `[pull] envs from ${url}: ${ids.length} ids, ${servers.length} servers, ${entries.length} entries`,
+        );
+        return { ids, servers, entries };
       }
     } catch (e) {
       console.warn(`[pull] envs ${url} failed`, e);
     }
   }
-  // Fallback: probe IDs 1..30 via export-openapi to discover envs Apidog has
+  // Fallback: probe IDs 1..100 via export-openapi to discover envs Apidog has
   // (imitates "select all" in the Export UI). Cheap because we just need
   // Apidog to echo back whatever IDs it accepts via servers.
   console.warn("[pull] no env list endpoint worked, falling back to probe range 1..100");
-  return { ids: Array.from({ length: 100 }, (_, i) => i + 1), servers: [] };
+  return { ids: Array.from({ length: 100 }, (_, i) => i + 1), servers: [], entries: [] };
 }
 
 function mergeServers(...groups: ApidogServerDTO[][]): ApidogServerDTO[] {
@@ -1053,6 +1091,38 @@ export const syncFromApidog = createServerFn({ method: "POST" })
       })
       .select("id, at, status, source, endpoints, size_bytes, message")
       .single();
+
+    // Replace apidog-sourced environments with whatever the pull returned.
+    // Uploaded/manual rows are left untouched.
+    if (ok && environmentExportData.entries.length > 0) {
+      try {
+        await supabaseAdmin
+          .from("collection_environments")
+          .delete()
+          .eq("collection_id", collection.id)
+          .eq("source", "apidog");
+        const rows = environmentExportData.entries.map((e, i) => ({
+          collection_id: collection.id,
+          name: e.name || `env-${e.id ?? i + 1}`,
+          source: "apidog" as const,
+          apidog_env_id: e.id,
+          base_url: e.baseUrl,
+          variables: e.variables,
+        }));
+        // Deduplicate by name (DB has UNIQUE(collection_id, name)).
+        const seen = new Set<string>();
+        const deduped = rows.filter((r) => {
+          if (seen.has(r.name)) return false;
+          seen.add(r.name);
+          return true;
+        });
+        if (deduped.length > 0) {
+          await supabaseAdmin.from("collection_environments").insert(deduped);
+        }
+      } catch (e) {
+        console.warn("[pull] failed to persist environments", e);
+      }
+    }
 
     // Markdown pull: fetch markdown pages from Apidog and store them on the collection
     // so they show in the UI and can be re-pushed. Gated by apidog_sync_markdowns.

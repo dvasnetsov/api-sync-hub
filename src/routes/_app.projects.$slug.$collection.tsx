@@ -13,6 +13,7 @@ import { PostmanCard } from "@/components/collection/PostmanCard";
 import { WorkflowSteps } from "@/components/collection/WorkflowSteps";
 import { HistoryTab } from "@/components/collection/HistoryTab";
 import { SettingsTab } from "@/components/collection/SettingsTab";
+import { EnvironmentsTab } from "@/components/collection/EnvironmentsTab";
 import { formatBytes, formatRelative, specPublicUrl } from "@/lib/format";
 import { getCollection, pushToApidog, syncFromApidog } from "@/lib/specs.functions";
 import {
@@ -114,7 +115,7 @@ function CollectionDetail() {
     onError: (e: Error) => toast.error(e.message),
   });
 
-  const [tab, setTab] = useState<"overview" | "history" | "settings">("overview");
+  const [tab, setTab] = useState<"overview" | "environments" | "history" | "settings">("overview");
 
   if (isLoading) {
     return (
@@ -278,6 +279,9 @@ function CollectionDetail() {
           <TabsTrigger value="overview" className="gap-1.5">
             <Sparkles className="h-3.5 w-3.5" /> Overview
           </TabsTrigger>
+          <TabsTrigger value="environments" className="gap-1.5">
+            <Sparkles className="h-3.5 w-3.5" /> Environments
+          </TabsTrigger>
           <TabsTrigger value="history" className="gap-1.5">
             <History className="h-3.5 w-3.5" /> Sync history
           </TabsTrigger>
@@ -349,6 +353,14 @@ function CollectionDetail() {
               />
             </div>
           </div>
+        </TabsContent>
+
+        <TabsContent value="environments" className="mt-6">
+          <EnvironmentsTab
+            projectSlug={project.slug}
+            collectionSlug={c.slug}
+            postmanReady={c.postmanApiKeyConfigured}
+          />
         </TabsContent>
 
         <TabsContent value="history" className="mt-6">

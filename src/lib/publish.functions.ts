@@ -143,6 +143,34 @@ export const publishToPostman = createServerFn({ method: "POST" })
         throw new Error(message);
       }
 
+      // Merge env variables into the collection's `variable[]` so users get
+      // sensible defaults even before they pick an environment.
+      const { data: envRows } = await supabaseAdmin
+        .from("collection_environments")
+        .select("name, base_url, variables, source")
+        .eq("collection_id", collection.id);
+      const envList = envRows ?? [];
+      if (envList.length > 0) {
+        const merged: Record<string, string> = {};
+        for (const e of envList) {
+          if (e.base_url && !merged.baseUrl) merged.baseUrl = String(e.base_url);
+          const vars = (e.variables ?? {}) as Record<string, unknown>;
+          for (const [k, v] of Object.entries(vars)) {
+            if (merged[k] !== undefined) continue;
+            merged[k] = v == null ? "" : typeof v === "string" ? v : String(v);
+          }
+        }
+        const existing = Array.isArray(collectionJson.variable) ? collectionJson.variable : [];
+        const existingKeys = new Set(
+          (existing as Array<{ key?: string }>).map((v) => v?.key).filter(Boolean) as string[],
+        );
+        const additions = Object.entries(merged)
+          .filter(([k]) => !existingKeys.has(k))
+          .map(([key, value]) => ({ key, value, type: "default" as const }));
+        collectionJson.variable = [...existing, ...additions];
+      }
+
+
       const existingId = collection.postman_collection_id as string | null;
       const workspaceId = collection.postman_workspace_id as string | null;
 
@@ -191,10 +219,90 @@ export const publishToPostman = createServerFn({ method: "POST" })
         }
         ok = true;
       }
+
+      // After the collection is in Postman, sync each environment as a
+      // separate Postman environment. Failures here are reported but don't
+      // fail the whole publish — the collection itself is already up.
+      try {
+        const { data: envRows2 } = await supabaseAdmin
+          .from("collection_environments")
+          .select("id, name, base_url, variables, postman_env_uid")
+          .eq("collection_id", collection.id);
+        const envCount = envRows2?.length ?? 0;
+        let envOk = 0;
+        let envFail = 0;
+        for (const env of envRows2 ?? []) {
+          const vars = (env.variables ?? {}) as Record<string, unknown>;
+          const values = Object.entries(vars).map(([key, value]) => ({
+            key,
+            value: value == null ? "" : typeof value === "string" ? value : String(value),
+            enabled: true,
+            type: /token|secret|password|key/i.test(key) ? "secret" : "default",
+          }));
+          if (env.base_url && !("baseUrl" in vars)) {
+            values.push({ key: "baseUrl", value: String(env.base_url), enabled: true, type: "default" });
+          }
+          const envBody = JSON.stringify({ environment: { name: env.name, values } });
+          try {
+            let uid = env.postman_env_uid as string | null;
+            let envRes: Response | null = null;
+            if (uid) {
+              envRes = await fetch(
+                `https://api.getpostman.com/environments/${encodeURIComponent(uid)}`,
+                {
+                  method: "PUT",
+                  headers: { "Content-Type": "application/json", "X-Api-Key": apiKey },
+                  body: envBody,
+                },
+              );
+              if (envRes.status === 404) uid = null;
+            }
+            if (!uid) {
+              const url = workspaceId
+                ? `https://api.getpostman.com/environments?workspace=${encodeURIComponent(workspaceId)}`
+                : "https://api.getpostman.com/environments";
+              envRes = await fetch(url, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-Api-Key": apiKey },
+                body: envBody,
+              });
+            }
+            const envTxt = await envRes!.text();
+            if (!envRes!.ok) {
+              envFail++;
+              continue;
+            }
+            try {
+              const parsedEnv = JSON.parse(envTxt) as {
+                environment?: { uid?: string; id?: string };
+              };
+              const newUid =
+                parsedEnv.environment?.uid ?? parsedEnv.environment?.id ?? uid ?? null;
+              if (newUid && newUid !== env.postman_env_uid) {
+                await supabaseAdmin
+                  .from("collection_environments")
+                  .update({ postman_env_uid: newUid })
+                  .eq("id", env.id);
+              }
+            } catch {
+              // ignore body parse errors
+            }
+            envOk++;
+          } catch {
+            envFail++;
+          }
+        }
+        if (envCount > 0) {
+          message = `${message} · envs ${envOk}/${envCount}${envFail ? ` (${envFail} failed)` : ""}`;
+        }
+      } catch (e) {
+        console.warn("[postman] env push failed", e);
+      }
     } catch (e) {
       ok = false;
       if (!message) message = e instanceof Error ? e.message : "Postman publish failed";
     }
+
 
     await supabaseAdmin
       .from("collections")
