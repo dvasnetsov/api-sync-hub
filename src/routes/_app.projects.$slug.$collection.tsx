@@ -279,6 +279,9 @@ function CollectionDetail() {
           <TabsTrigger value="overview" className="gap-1.5">
             <Sparkles className="h-3.5 w-3.5" /> Overview
           </TabsTrigger>
+          <TabsTrigger value="environments" className="gap-1.5">
+            <Sparkles className="h-3.5 w-3.5" /> Environments
+          </TabsTrigger>
           <TabsTrigger value="history" className="gap-1.5">
             <History className="h-3.5 w-3.5" /> Sync history
           </TabsTrigger>
